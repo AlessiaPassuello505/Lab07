@@ -2,7 +2,10 @@ from database.meteo_dao import MeteoDao as DAO
 
 class Model:
     def __init__(self):
-        pass
+        self._citta_disponibili = ["Milano", "Torino", "Genova"]
+        self._percorso_migliore = []
+        self._costo_minimo = float('inf')
+        self._mappa_umidita={}
 
     def get_umidita_media(self,mese):
         return DAO.get_umidita_media(mese)
@@ -13,77 +16,64 @@ class Model:
     def calcola_percorso(self, mese):
         # Recuperiamo i dati dal DAO e li organizziamo per un accesso rapido
         dati_db = DAO.get_umidita_15(mese)
+        self._mappa_umidita={}
         # Creiamo una mappa: giorno -> {citta: umidita}
-        self._mappa_umidita = {}
         for s in dati_db:
             g = s.data.day
             if g not in self._mappa_umidita:
                 self._mappa_umidita[g] = {}
             self._mappa_umidita[g][s.localita] = s.umidita
+        # Lanciamo la ricorsione partendo dal giorno 1 con percorso vuoto
 
-        self._citta_disponibili = ["Milano", "Torino", "Genova"]
-        self._percorso_migliore = []
-        self._costo_minimo = float('inf')
-         # Lanciamo la ricorsione partendo dal giorno 1 con percorso vuoto
-        self._ricorsione([], 1,0)
+        self._costo_minimo=float('inf')
+        self._percorso_migliore=[]
+        self._ricorsione([], 0)
 
         return self._percorso_migliore, self._costo_minimo
 
-    def _ricorsione(self, parziale, giorno,costo):
+    def get_umidita_specifica(self, giorno, citta):
+        return self._mappa_umidita[giorno][citta]
+
+    def _ricorsione(self, parziale,costo):
+        giorno=len(parziale)+1
         # CASO TERMINALE: abbiamo pianificato tutti i 15 giorni
         if giorno == 16:
             if costo < self._costo_minimo:
+                print(f"Nuovo record trovato! Costo: {costo}")
                 self._costo_minimo = costo
                 self._percorso_migliore = list(parziale)
             return
 
         # Prova a inserire una delle 3 città per il giorno attuale
-        if self._vinc_ammissibile(parziale, citta):
-            # CALCOLO COSTO ISTANTANEO
-            nuovo_costo = costo + self._mappa_umidita[giorno][citta]
+        for citta in self._citta_disponibili:
+            if self._vinc_ammissibile(parziale, citta):
+                # CALCOLO COSTO ISTANTANEO
+                nuovo_costo = costo + self._mappa_umidita[giorno][citta]
+                # Aggiungo 100 solo se cambio città
+                if len(parziale) > 0 and citta != parziale[-1]:
+                    nuovo_costo += 100
 
-            # Aggiungo 100 solo se cambio città
-            if len(parziale) > 0 and citta != parziale[-1]:
-                nuovo_costo += 100
+                # PRUNING: taglio rami inutili
+                if nuovo_costo < self._costo_minimo:
+                    parziale.append(citta)
+                    self._ricorsione(parziale, nuovo_costo)
+                    parziale.pop()
 
-            # PRUNING: Procedo solo se il costo attuale è già migliore del record
-            if nuovo_costo < self._costo_minimo:
-                parziale.append(citta)
-                self._ricorsione(parziale, giorno + 1, nuovo_costo)
-                parziale.pop()
-
-    def _vinc_ammissibile(self, parziale, nuova_citta):
+    def _vinc_ammissibile(self, parziale, citta):
         # Vincolo 1: Massimo 6 giorni per città
-        if parziale.count(nuova_citta) >= 6:
+        if parziale.count(citta) >= 6:
             return False
-
         # Vincolo 2: Permanenza minima di 3 giorni consecutivi
-        if len(parziale) > 0:
-            # Se stiamo cambiando città...
-            if nuova_citta != parziale[-1]:
+        if len(parziale) == 0:
+            return True
+        ultima_citta=parziale[-1]
+        # Se stiamo cambiando città...
+        if citta != ultima_citta:
                 # ...dobbiamo aver passato almeno 3 giorni nell'ultima
                 if len(parziale) < 3:
                     return False
                 if not (parziale[-1] == parziale[-2] == parziale[-3]):
                     return False
-
-        # Vincolo extra: se ho iniziato una città ma sono al giorno 2, devo continuare
-        if 1 < len(parziale) < 3:
-            if nuova_citta != parziale[-1]:
-                return False
-
         return True
 
-    def _calcola_costo_totale(self, parziale):
-        costo = 0
-        for i in range(len(parziale)):
-            giorno = i + 1
-            citta_attuale = parziale[i]
 
-            # Aggiungo l'umidità del giorno (sempre presente)
-            costo += self._mappa_umidita[giorno][citta_attuale]
-
-            # Aggiungo il costo di spostamento (100) se la città cambia rispetto al giorno prima
-            if i > 0 and parziale[i] != parziale[i - 1]:
-                costo += 100
-        return costo

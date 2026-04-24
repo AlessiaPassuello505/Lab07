@@ -24,13 +24,17 @@ class Controller:
 
     def handle_sequenza(self, e):
         mese = self._view.dd_mese.value
-
         self._view.lst_result.controls.clear()
         percorso_migliore,costo_min=self._model.calcola_percorso(mese)
-        self._view.lst_result.controls.append(ft.Text(f"La sequenza ottima ha costo {costo_min}  ed è :"))
 
-        for p in percorso_migliore:
-            self._view.lst_result.controls.append(ft.Text(p))
+        self._view.lst_result.controls.append(ft.Text(f"La sequenza ottima ha costo {costo_min}  ed è :"))
+        for i in range(len(percorso_migliore)):
+            giorno=i+1
+            citta=percorso_migliore[i]
+            umidita = self._model.get_umidita_specifica(giorno, citta)
+            data_str = f"2013-{int(mese):02d}-{giorno:02d}"
+            linea=f"[{citta}- {data_str}] Umidità={umidita}"
+            self._view.lst_result.controls.append(ft.Text(linea))
         self._view.update_page()
 
 
